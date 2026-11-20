@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 마음자로 (MVP)
 
-## Getting Started
+마음으로 맞는 주사. 주 1회 체중과 실천 행동을 기록하고, 4주를 채우면 '마음 1펜'만큼의 가상 금액이 쌓이는 체중관리 게임 웹앱(PWA)입니다.
 
-First, run the development server:
+- 로그인 없음. 기록은 휴대폰 브라우저(localStorage)에만 저장됩니다.
+- 서버가 필요 없는 정적 웹앱입니다(`next build` → `out/` 폴더).
+- 익명 체크인 신호는 선택 기능입니다. 환경변수가 없으면 꺼져 있습니다.
+
+## 바로 실행
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 배포 (Vercel)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. 이 폴더를 GitHub 저장소로 올립니다.
+2. Vercel에서 저장소를 Import → 설정은 기본값 그대로 → Deploy.
+3. 휴대폰으로 배포 주소를 열고 **홈 화면에 추가**합니다.
+   - 아이폰: 사파리 공유 버튼 → '홈 화면에 추가'. 홈 화면에서 열어야 기록이 7일 미사용 삭제 대상에서 빠집니다.
+   - 안드로이드: 크롬 메뉴 → '앱 설치' 또는 '홈 화면에 추가'.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 익명 체크인 신호 (8주 테스트용, 선택)
 
-## Learn More
+참가자의 4주·8주 유지율을 보기 위한 기능입니다. **체중·금액·쓸 곳 이름은 보내지 않습니다.**
 
-To learn more about Next.js, take a look at the following resources:
+1. Supabase 프로젝트 → SQL Editor에서 `supabase/checkin_events.sql` 실행
+2. Vercel 프로젝트 → Settings → Environment Variables에 추가 후 재배포
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. 환경변수가 있으면 목표 설정 화면에 동의 체크박스가 나타나고, 동의한 사람만 신호를 보냅니다.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+보내는 항목: 익명 ID, 이벤트(start·checkin·pen·saving·graduate), 주차, 실천 여부(done·partial·missed), 앱 버전.
+분석 쿼리 예시는 SQL 파일 아래쪽에 있습니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 규칙 요약
 
-## Deploy on Vercel
+| 항목 | 규칙 |
+| --- | --- |
+| 주간 스탬프 | 시작일 기준 한 주에 한 번 체크인하면 받음. 체중이 늘어도, 실천을 못 해도 받음 |
+| 마음 1펜 | 체크인 4번 = 1펜 = 4주 가상 비용만큼 가상 절약액 적립 |
+| 유지 모드 | 목표 체중 이하에 처음 닿으면 시작 |
+| 유지 인정 | 목표 체중 + 1kg 이내면 한 주 인정. 벗어나면 0부터 다시(벌칙 없음) |
+| 졸업 | 유지 주수가 유지기간(4·8·12주)에 닿으면 졸업, 가상 절약액 '확정' |
+| 목표 체중 | 현재보다 낮고 BMI 18.5 이상만 허용 |
+| 속도 안내 | 직전 기록 대비 주당 1.5kg 넘게 줄면 천천히 하라는 안내 |
+| 쓸 곳 | 최대 3개, 비율 합계 100% 이하. 남는 몫은 '아직 정하지 않음' |
+| 실제 저축 | 선택. 기록한 금액은 그때의 비율대로 자동 배분 |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+규칙 숫자는 `src/lib/rules.ts` 맨 위 상수에서 바꿀 수 있습니다.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 내부 점검
+
+설정 → **테스트 모드**를 켜면 주 1회 제한이 풀려 여러 주를 바로 기록해 볼 수 있습니다. 점검이 끝나면 '모든 기록 지우기'로 초기화하세요.
+
+## 구조
+
+```
+src/
+  app/            레이아웃, 첫 화면
+  components/     Onboarding(목표 설정), Home(주간 체크인), Done(체크인 완료),
+                  PenCard(4주 성취 카드), Settings(설정), BucketEditor(쓸 곳 편집), ui
+  lib/            rules(규칙), storage(기기 저장·백업), telemetry(익명 신호), ics(캘린더), format
+public/           manifest, 서비스워커(sw.js), 아이콘
+supabase/         익명 신호 테이블 SQL
+```
+
+마음자로는 의료 조언이 아니며, 특정 의약품을 대신하지 않습니다.
