@@ -119,26 +119,42 @@ export type Phase = "losing" | "maintaining" | "graduated";
 
 export interface Progress {
   phase: Phase;
-  maintainCount: number; // 연속 유지 주수
-  outOfBand: boolean; // 유지 중 범위를 벗어나 다시 세는 중
+  maintainCount: number; // 졸업 전: 연속 유지 주수 / 졸업 후: 졸업 뒤 범위 안 연속 주수
+  outOfBand: boolean; // 가장 최근 기록이 유지 범위를 벗어남
+  graduatedAt: number | null; // 졸업한 체크인의 순번(0부터)
 }
 
 /**
  * 목표 체중 이하에 처음 닿으면 유지 모드.
  * 그 뒤 체크인마다 '목표 + 1kg 이내'면 유지 주수 +1, 벗어나면 0부터 다시(벌칙 없음).
- * 유지 주수가 유지기간에 닿으면 졸업(한 번 졸업하면 유지).
+ * 유지 주수가 유지기간에 닿으면 졸업(한 번 졸업하면 계속 졸업).
+ * 졸업 후에도 기록은 이어지고, 범위 안 연속 주수를 따로 셉니다.
  */
 export function progress(profile: Profile, checkins: Checkin[]): Progress {
+  const band = profile.goalWeight + MAINTAIN_BAND_KG;
   let reached = false;
   let count = 0;
   let outOfBand = false;
-  for (const c of checkins) {
+  let graduatedAt: number | null = null;
+  let post = 0;
+  for (let i = 0; i < checkins.length; i++) {
+    const c = checkins[i];
+    if (graduatedAt !== null) {
+      if (c.weight <= band) {
+        post += 1;
+        outOfBand = false;
+      } else {
+        post = 0;
+        outOfBand = true;
+      }
+      continue;
+    }
     if (!reached) {
       if (c.weight <= profile.goalWeight) {
         reached = true;
         count = 1;
       }
-    } else if (c.weight <= profile.goalWeight + MAINTAIN_BAND_KG) {
+    } else if (c.weight <= band) {
       count += 1;
       outOfBand = false;
     } else {
@@ -146,10 +162,32 @@ export function progress(profile: Profile, checkins: Checkin[]): Progress {
       outOfBand = true;
     }
     if (reached && count >= profile.maintainWeeks) {
-      return { phase: "graduated", maintainCount: count, outOfBand: false };
+      graduatedAt = i;
+      outOfBand = false;
     }
   }
-  return { phase: reached ? "maintaining" : "losing", maintainCount: count, outOfBand };
+  if (graduatedAt !== null) return { phase: "graduated", maintainCount: post, outOfBand, graduatedAt };
+  return { phase: reached ? "maintaining" : "losing", maintainCount: count, outOfBand, graduatedAt: null };
+}
+
+/** 졸업 순간까지 완성한 펜 수(이후 펜은 '졸업 후 유지'로 따로 셈) */
+export function pensAtGraduation(state: AppState): number | null {
+  if (!state.profile) return null;
+  const p = progress(state.profile, state.checkins);
+  return p.graduatedAt === null ? null : Math.floor((p.graduatedAt + 1) / PEN_WEEKS);
+}
+
+/** 졸업 때 고정된 가상 절약액. 졸업 전이면 null */
+export function confirmedSaved(state: AppState): number | null {
+  const g = pensAtGraduation(state);
+  return g === null || !state.profile ? null : g * state.profile.penCost;
+}
+
+/** 졸업 후 유지로 아낀 가상 금액 */
+export function postGraduationSaved(state: AppState): number {
+  const g = pensAtGraduation(state);
+  if (g === null || !state.profile) return 0;
+  return Math.max(0, completedPens(state) - g) * state.profile.penCost;
 }
 
 export function lastWeight(state: AppState): number | null {

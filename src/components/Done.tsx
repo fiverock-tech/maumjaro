@@ -9,7 +9,8 @@ import {
   isFastLoss,
   progress,
   stampsInCurrentPen,
-  virtualSaved,
+  MAINTAIN_BAND_KG,
+  confirmedSaved,
 } from "@/lib/rules";
 import { kg, ordinal, won } from "@/lib/format";
 import { Card, CheckIcon, H2, PrimaryButton, Screen, TopBar } from "./ui";
@@ -18,10 +19,12 @@ export default function Done({
   state,
   onHome,
   onOpenPen,
+  onOpenGraduation,
 }: {
   state: AppState;
   onHome: () => void;
   onOpenPen: (pen: number) => void;
+  onOpenGraduation: () => void;
 }) {
   const profile = state.profile!;
   const cs = state.checkins;
@@ -84,7 +87,7 @@ export default function Done({
         <Card tone="solid" className="gap-1.5">
           <div className="text-xl font-bold">졸업했어요!</div>
           <p className="m-0 text-sm leading-relaxed">
-            목표 체중을 {profile.maintainWeeks}주 동안 지켰어요. 가상 절약액 {won(virtualSaved(state))}이 확정됐어요.
+            목표 체중을 {profile.maintainWeeks}주 동안 지켰어요. 가상 절약액 {won(confirmedSaved(state) ?? 0)}이 확정됐어요.
           </p>
         </Card>
       )}
@@ -116,6 +119,19 @@ export default function Done({
         </div>
       </Card>
 
+      {before.phase === "graduated" && (
+        <Card tone={after.outOfBand ? "coral" : "teal"} className="gap-1">
+          <div className={`text-[15px] font-bold ${after.outOfBand ? "text-coral-text" : "text-teal"}`}>
+            {after.outOfBand ? "유지 범위를 조금 벗어났어요" : `유지 범위 안 · ${after.maintainCount}주 연속`}
+          </div>
+          <p className="m-0 text-sm leading-relaxed">
+            {after.outOfBand
+              ? `이번 주는 ${kg(profile.goalWeight + MAINTAIN_BAND_KG)}보다 높아요. 벌칙은 없어요. 다음 주에 다시 돌아오면 돼요.`
+              : `${kg(profile.goalWeight + MAINTAIN_BAND_KG)} 이하를 지키고 있어요.`}
+          </p>
+        </Card>
+      )}
+
       <Card tone="teal" className="gap-1.5">
         <div className="text-[15px] font-bold text-teal">{actionTitle}</div>
         <p className="m-0 text-sm leading-relaxed">{actionBody}</p>
@@ -140,7 +156,9 @@ export default function Done({
       )}
 
       <div className="mt-auto flex flex-col gap-2.5">
-        {penDone ? (
+        {justGraduated ? (
+          <PrimaryButton onClick={onOpenGraduation}>졸업 카드 보기</PrimaryButton>
+        ) : penDone ? (
           <PrimaryButton onClick={() => onOpenPen(penNo)}>{ordinal(penNo)} 마음 펜 완성! 카드 보기</PrimaryButton>
         ) : (
           <PrimaryButton onClick={onHome}>홈으로</PrimaryButton>

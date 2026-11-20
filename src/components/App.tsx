@@ -10,8 +10,9 @@ import Home from "./Home";
 import Done from "./Done";
 import PenCard from "./PenCard";
 import Settings from "./Settings";
+import Graduation from "./Graduation";
 
-type View = { name: "home" } | { name: "done" } | { name: "settings" } | { name: "pen"; pen: number };
+type View = { name: "home" } | { name: "done" } | { name: "settings" } | { name: "graduation" } | { name: "pen"; pen: number };
 
 export default function App() {
   const [state, setState] = useState<AppState | null>(null);
@@ -96,7 +97,25 @@ export default function App() {
 
   switch (view.name) {
     case "done":
-      return <Done state={state} onHome={() => setView({ name: "home" })} onOpenPen={(pen) => setView({ name: "pen", pen })} />;
+      return (
+        <Done
+          state={state}
+          onHome={() => setView({ name: "home" })}
+          onOpenPen={(pen) => setView({ name: "pen", pen })}
+          onOpenGraduation={() => setView({ name: "graduation" })}
+        />
+      );
+    case "graduation":
+      return (
+        <Graduation
+          state={state}
+          onBack={() => setView({ name: "home" })}
+          onContinue={() => {
+            update((s) => ({ ...s, graduationSeen: true }));
+            setView({ name: "home" });
+          }}
+        />
+      );
     case "pen":
       return (
         <PenCard
@@ -139,6 +158,7 @@ export default function App() {
           onCheckin={checkin}
           onOpenSettings={() => setView({ name: "settings" })}
           onOpenPen={(pen) => setView({ name: "pen", pen })}
+          onOpenGraduation={() => setView({ name: "graduation" })}
         />
       );
   }

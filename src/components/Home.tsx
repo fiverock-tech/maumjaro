@@ -8,7 +8,10 @@ import {
   PEN_WEEKS,
   canCheckIn,
   completedPens,
+  confirmedSaved,
   daysUntilCheckinDay,
+  pensAtGraduation,
+  postGraduationSaved,
   hasUnseenPen,
   lastWeight,
   progress,
@@ -33,12 +36,14 @@ export default function Home({
   onCheckin,
   onOpenSettings,
   onOpenPen,
+  onOpenGraduation,
 }: {
   state: AppState;
   now: Date;
   onCheckin: (weight: number, status: ActionStatus) => void;
   onOpenSettings: () => void;
   onOpenPen: (pen: number) => void;
+  onOpenGraduation: () => void;
 }) {
   const profile = state.profile!;
   const [weight, setWeight] = useState("");
@@ -109,11 +114,33 @@ export default function Home({
         </Card>
       )}
 
-      {prog.phase === "graduated" && (
-        <Card tone="solid" className="gap-1.5">
+      {prog.phase === "graduated" && !state.graduationSeen && (
+        <Card tone="solid" className="gap-2">
           <div className="text-[13px] font-semibold opacity-90">목표 체중 + {profile.maintainWeeks}주 유지 달성</div>
           <div className="text-xl font-bold">졸업했어요!</div>
-          <p className="m-0 text-sm leading-relaxed">가상 절약액 {won(virtualSaved(state))}이 확정됐어요. 기록은 계속 이어갈 수 있어요.</p>
+          <button
+            type="button"
+            onClick={onOpenGraduation}
+            className="h-11 rounded-xl bg-white text-[15px] font-semibold text-teal"
+          >
+            졸업 카드 보기
+          </button>
+        </Card>
+      )}
+
+      {prog.phase === "graduated" && state.graduationSeen && (
+        <Card tone="teal" className="gap-1">
+          <div className="text-[15px] font-bold text-teal">
+            유지 시즌 · {prog.outOfBand ? "범위를 조금 벗어났어요" : `범위 안 ${prog.maintainCount}주 연속`}
+          </div>
+          <p className="m-0 text-[13px] leading-relaxed text-sub">
+            {prog.outOfBand
+              ? `이번엔 ${kg(profile.goalWeight + MAINTAIN_BAND_KG)}보다 높았어요. 다음 주에 다시 돌아오면 돼요.`
+              : `${kg(profile.goalWeight + MAINTAIN_BAND_KG)} 이하를 지키고 있어요. 확정 금액 ${won(confirmedSaved(state) ?? 0)}은 그대로예요.`}
+          </p>
+          <button type="button" onClick={onOpenGraduation} className="mt-1 h-10 w-fit text-[13px] text-teal underline underline-offset-2">
+            졸업 카드 다시 보기
+          </button>
         </Card>
       )}
 
@@ -204,7 +231,11 @@ export default function Home({
       )}
 
       <section className="grid grid-cols-3 gap-2">
-        <Stat label="가상 절약액" value={won(virtualSaved(state))} sub={`마음 ${pens}펜`} tone="teal" />
+        {prog.phase === "graduated" ? (
+          <Stat label="확정 절약액" value={won(confirmedSaved(state) ?? 0)} sub={`마음 ${pensAtGraduation(state) ?? 0}펜`} tone="teal" />
+        ) : (
+          <Stat label="가상 절약액" value={won(virtualSaved(state))} sub={`마음 ${pens}펜`} tone="teal" />
+        )}
         <Stat label="실제 모은 돈" value={won(totalSaved(state.savings))} sub="직접 기록" tone="coral" />
         {prog.phase === "losing" && (
           <Stat label="졸업까지" value={kg(Math.max(0, last - profile.goalWeight))} sub={`+ ${profile.maintainWeeks}주 유지`} />
@@ -212,7 +243,14 @@ export default function Home({
         {prog.phase === "maintaining" && (
           <Stat label="졸업까지" value={`${profile.maintainWeeks - prog.maintainCount}주`} sub="유지 남음" />
         )}
-        {prog.phase === "graduated" && <Stat label="졸업" value="완료" sub="가상 금액 확정" />}
+        {prog.phase === "graduated" && (
+          <Stat
+            label="졸업 후 유지"
+            value={won(postGraduationSaved(state))}
+            sub={`${pens - (pensAtGraduation(state) ?? pens)}펜 더 채움`}
+            tone="teal"
+          />
+        )}
       </section>
 
       {pens > 0 && (

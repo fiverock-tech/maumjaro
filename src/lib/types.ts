@@ -52,4 +52,5 @@ export interface AppState {
   anonId: string;
   consent: boolean; // 익명 체크인 신호 전송 동의
   testMode: boolean; // 주 1회 제한 해제(내부 테스트용)
+  graduationSeen?: boolean; // 졸업 화면을 확인하고 '유지 계속하기'를 눌렀는지
 }

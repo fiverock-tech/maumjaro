@@ -6,7 +6,9 @@ import {
   ACTION_PRESETS,
   PEN_WEEKS,
   UNASSIGNED,
+  confirmedSaved,
   penCheckins,
+  pensAtGraduation,
   savedByBucket,
   sumPercent,
   validateBuckets,
@@ -51,7 +53,9 @@ export default function PenCard({
   const doneCount = cs.filter((c) => c.status === "done").length;
   const partialCount = cs.filter((c) => c.status === "partial").length;
   const delta = cs[cs.length - 1].weight - weightBeforePen(state, pen);
-  const cumulative = pen * profile.penCost;
+  const gradPens = pensAtGraduation(state);
+  const isPost = gradPens !== null && pen > gradPens;
+  const cumulative = isPost ? (pen - gradPens!) * profile.penCost : pen * profile.penCost;
   const savedThisPen = state.savings.filter((s) => s.pen === pen).reduce((a, s) => a + s.amount, 0);
   const byBucket = savedByBucket(state.savings);
   const total = sumPercent(profile.buckets);
@@ -73,7 +77,9 @@ export default function PenCard({
   };
 
   const share = async () => {
-    const text = `마음자로 ${ordinal(pen)} 마음 펜 완성! 4주 꾸준히 기록하고 가상으로 ${won(cumulative)}을 아꼈어요.`;
+    const text = isPost
+      ? `마음자로 졸업 후에도 유지 중! ${ordinal(pen)} 마음 펜 완성.`
+      : `마음자로 ${ordinal(pen)} 마음 펜 완성! 4주 꾸준히 기록하고 가상으로 ${won(cumulative)}을 아꼈어요.`;
     try {
       if (navigator.share) {
         await navigator.share({ title: "마음자로", text, url: location.origin });
@@ -91,7 +97,7 @@ export default function PenCard({
       <TopBar onBack={onBack} right={`${ordinal(pen)} 펜`} />
 
       <Card tone="solid" className="gap-2 py-6">
-        <div className="text-[13px] font-semibold opacity-90">마음 주사 {PEN_WEEKS}번 완주</div>
+        <div className="text-[13px] font-semibold opacity-90">{isPost ? "유지 시즌 · " : ""}마음 주사 {PEN_WEEKS}번 완주</div>
         <h1 className="m-0 text-[28px] font-bold leading-snug">{ordinal(pen)} 마음 펜 완성!</h1>
         <p className="m-0 text-[15px] leading-relaxed">4주 동안 기록을 이어왔어요. 이게 가장 어려운 부분이에요.</p>
       </Card>
@@ -117,9 +123,13 @@ export default function PenCard({
       </section>
 
       <Card className="gap-1.5">
-        <div className="text-[13px] font-semibold text-sub">가상 절약액</div>
+        <div className="text-[13px] font-semibold text-sub">{isPost ? "졸업 후 유지로 아낀 돈" : "가상 절약액"}</div>
         <div className="text-[26px] font-bold text-teal">+{won(profile.penCost)}</div>
-        <Help>누적 {won(cumulative)} · 약을 쓰지 않았을 때의 단순 비교 예시예요.</Help>
+        <Help>
+          {isPost
+            ? `졸업 후 누적 ${won(cumulative)} · 확정 금액 ${won(confirmedSaved(state) ?? 0)}은 그대로예요.`
+            : `누적 ${won(cumulative)} · 약을 쓰지 않았을 때의 단순 비교 예시예요.`}
+        </Help>
       </Card>
 
       <Card tone="coral" className="gap-3">
