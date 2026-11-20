@@ -1,4 +1,4 @@
-import type { AppState, Bucket, Checkin, Profile, Saving, SavingSplit } from "./types";
+import type { AppState, Bucket, Checkin, DailyWeight, Profile, Saving, SavingSplit } from "./types";
 
 export const PEN_WEEKS = 4;
 export const MAX_BUCKETS = 3;
@@ -26,17 +26,81 @@ function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
+/** 기기 현지 기준 YYYY-MM-DD */
+export function localDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function fromLocalDate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function addDays(s: string, n: number): string {
+  const d = fromLocalDate(s);
+  d.setDate(d.getDate() + n);
+  return localDate(d);
+}
+
+/** 앱 기준 현재 시각. 테스트 모드에서는 넘긴 날짜만큼 더함 */
+export function appNow(state: Pick<AppState, "testMode" | "testDayOffset">, real = new Date()): Date {
+  const off = state.testMode ? state.testDayOffset || 0 : 0;
+  return new Date(real.getTime() + off * DAY_MS);
+}
+
 /** 시작일 기준 몇 번째 주인지(0부터) */
 export function weekIndex(startedAt: string, now: Date): number {
   const diff = startOfDay(now) - startOfDay(new Date(startedAt));
   return Math.max(0, Math.floor(diff / (7 * DAY_MS)));
 }
 
-export function canCheckIn(state: AppState, now: Date): boolean {
+export function checkedThisWeek(state: AppState, now: Date): boolean {
   if (!state.profile) return false;
-  if (state.testMode) return true;
   const w = weekIndex(state.profile.startedAt, now);
-  return !state.checkins.some((c) => c.week === w);
+  return state.checkins.some((c) => c.week === w);
+}
+
+/** 이번 주(시작일 기준 7일 단위)에 실제로 입력한 마지막 체중 */
+export function weekWeight(state: AppState, now: Date): DailyWeight | null {
+  if (!state.profile) return null;
+  const w = weekIndex(state.profile.startedAt, now);
+  const today = localDate(now);
+  const inWeek = state.weights.filter(
+    (x) => x.date <= today && weekIndex(state.profile!.startedAt, fromLocalDate(x.date)) === w
+  );
+  return inWeek.length ? inWeek[inWeek.length - 1] : null;
+}
+
+/** 이번 주 아직 마음 주사를 안 맞았고, 이번 주 체중 입력이 1번 이상 있어야 체크인 가능 */
+export function canCheckIn(state: AppState, now: Date): boolean {
+  return !checkedThisWeek(state, now) && weekWeight(state, now) !== null;
+}
+
+/** 같은 날 기록은 덮어쓰고 날짜순으로 정렬 */
+export function upsertWeight(weights: DailyWeight[], entry: DailyWeight): DailyWeight[] {
+  return [...weights.filter((w) => w.date !== entry.date), entry].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 가장 최근 실제 입력(오늘 이후 날짜는 제외) */
+export function latestWeight(state: AppState, now: Date): DailyWeight | null {
+  const today = localDate(now);
+  const past = state.weights.filter((w) => w.date <= today);
+  return past.length ? past[past.length - 1] : null;
+}
+
+/** 날짜별 7일 평균: 그날 포함 지난 7일 안의 실제 입력 평균 */
+export function movingAverage(weights: DailyWeight[], days = 7): { date: string; avg: number }[] {
+  if (!weights.length) return [];
+  const out: { date: string; avg: number }[] = [];
+  const first = weights[0].date;
+  const last = weights[weights.length - 1].date;
+  for (let d = first; d <= last; d = addDays(d, 1)) {
+    const from = addDays(d, -(days - 1));
+    const win = weights.filter((w) => w.date >= from && w.date <= d);
+    if (win.length) out.push({ date: d, avg: win.reduce((a, w) => a + w.weight, 0) / win.length });
+  }
+  return out;
 }
 
 /** 다음 체크인 요일까지 남은 날(오늘이면 0) */
@@ -191,6 +255,8 @@ export function postGraduationSaved(state: AppState): number {
 }
 
 export function lastWeight(state: AppState): number | null {
+  const w = state.weights?.[state.weights.length - 1];
+  if (w) return w.weight;
   const c = state.checkins[state.checkins.length - 1];
   return c ? c.weight : state.profile?.startWeight ?? null;
 }

@@ -6,23 +6,33 @@ import {
   DAY_NAMES,
   MAINTAIN_BAND_KG,
   PEN_WEEKS,
-  canCheckIn,
+  checkedThisWeek,
   completedPens,
   confirmedSaved,
   daysUntilCheckinDay,
   pensAtGraduation,
   postGraduationSaved,
+  fromLocalDate,
   hasUnseenPen,
   lastWeight,
+  latestWeight,
+  localDate,
   progress,
   stampsInCurrentPen,
   totalSaved,
   virtualSaved,
   weekIndex,
+  weekWeight,
 } from "@/lib/rules";
 import { kg, ordinal, parseDecimal, won } from "@/lib/format";
 import { needsHomeScreenHint } from "@/lib/storage";
 import { Card, CheckIcon, Choice, Field, H2, Help, PrimaryButton, Screen, Stat, TopBar } from "./ui";
+import WeightChart from "./WeightChart";
+
+function md(s: string) {
+  const d = fromLocalDate(s);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
 
 const STATUS_LABEL: Record<ActionStatus, string> = {
   done: "해냈어요",
@@ -33,28 +43,36 @@ const STATUS_LABEL: Record<ActionStatus, string> = {
 export default function Home({
   state,
   now,
+  onSaveWeight,
   onCheckin,
   onOpenSettings,
   onOpenPen,
   onOpenGraduation,
+  onTestAdvance,
 }: {
   state: AppState;
   now: Date;
-  onCheckin: (weight: number, status: ActionStatus) => void;
+  onSaveWeight: (weight: number) => void;
+  onCheckin: (status: ActionStatus) => void;
   onOpenSettings: () => void;
   onOpenPen: (pen: number) => void;
   onOpenGraduation: () => void;
+  onTestAdvance: (days: number) => void;
 }) {
   const profile = state.profile!;
+  const today = localDate(now);
+  const todayEntry = state.weights.find((w) => w.date === today) ?? null;
   const [weight, setWeight] = useState("");
-  const [status, setStatus] = useState<ActionStatus | null>(null);
+  const [editing, setEditing] = useState(!todayEntry);
+  const [status, setStatus] = useState<ActionStatus>("done");
   const [showHint] = useState(() => needsHomeScreenHint());
 
-  const realWeek = weekIndex(profile.startedAt, now);
-  const lastCheckin = state.checkins[state.checkins.length - 1];
-  // 테스트 모드에서는 기록할 때마다 주차가 하나씩 올라가므로 화면도 같은 기준으로 표시
-  const week = state.testMode && lastCheckin ? Math.max(realWeek, lastCheckin.week + 1) : realWeek;
-  const open = canCheckIn(state, now);
+  const week = weekIndex(profile.startedAt, now);
+  const checked = checkedThisWeek(state, now);
+  const open = !checked;
+  const ww = weekWeight(state, now);
+  const latest = latestWeight(state, now);
+  const daysSinceLatest = latest ? Math.round((fromLocalDate(today).getTime() - fromLocalDate(latest.date).getTime()) / 86400000) : null;
   const stamps = stampsInCurrentPen(state);
   const pens = completedPens(state);
   const currentPen = pens + 1;
@@ -66,8 +84,14 @@ export default function Home({
 
   const w = parseDecimal(weight);
   const weightOk = w >= 30 && w <= 300;
+  const saveWeight = () => {
+    if (!weightOk) return;
+    onSaveWeight(Math.round(w * 10) / 10);
+    setWeight("");
+    setEditing(false);
+  };
 
-  const title = !open ? "이번 주 마음 주사 완료" : isDay ? "오늘은 마음 주사의 날" : "이번 주 마음 주사를 맞아요";
+  const title = checked ? "이번 주 마음 주사 완료" : isDay ? "오늘은 마음 주사의 날" : "이번 주 마음 주사를 맞아요";
 
   return (
     <Screen>
@@ -91,6 +115,22 @@ export default function Home({
           </>
         }
       />
+
+      {state.testMode && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-coral-line bg-coral-bg px-3 py-2 text-xs text-coral-text">
+          <span>
+            테스트 날짜 {md(today)}({DAY_NAMES[now.getDay()]}) · +{state.testDayOffset || 0}일
+          </span>
+          <span className="flex gap-1.5">
+            <button type="button" onClick={() => onTestAdvance(1)} className="min-h-8 rounded-lg bg-white px-2.5 font-semibold">
+              +1일
+            </button>
+            <button type="button" onClick={() => onTestAdvance(7)} className="min-h-8 rounded-lg bg-white px-2.5 font-semibold">
+              +7일
+            </button>
+          </span>
+        </div>
+      )}
 
       {showHint && (
         <Card tone="teal" className="gap-1.5">
@@ -146,6 +186,51 @@ export default function Home({
 
       <h1 className="m-0 px-1 text-2xl font-bold leading-snug">{title}</h1>
 
+      <Card className="gap-3">
+        <div className="flex items-baseline justify-between">
+          <H2>오늘 체중</H2>
+          {latest && (
+            <div className="text-[13px] text-muted">
+              현재 {kg(latest.weight)}
+              {daysSinceLatest ? ` · ${daysSinceLatest}일 전 기록` : ""}
+            </div>
+          )}
+        </div>
+        {todayEntry && !editing ? (
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[15px]">
+              오늘 <span className="text-lg font-bold">{kg(todayEntry.weight)}</span> 기록했어요
+            </div>
+            <button type="button" onClick={() => setEditing(true)} className="h-10 rounded-xl border border-line px-3.5 text-sm text-sub">
+              수정
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <Field
+                id="weight"
+                label="체중 (kg)"
+                value={weight}
+                onChange={setWeight}
+                unit="kg"
+                inputMode="decimal"
+                placeholder={(todayEntry?.weight ?? last).toFixed(1)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={saveWeight}
+              disabled={!weightOk}
+              className="h-12 rounded-xl bg-teal px-5 text-[15px] font-semibold text-white disabled:opacity-40"
+            >
+              기록
+            </button>
+          </div>
+        )}
+        <Help>매일 기록해도 되고, 일주일에 한 번만 해도 돼요. 마음 주사에는 그 주의 마지막 기록이 들어가요.</Help>
+      </Card>
+
       <Card className="gap-3.5">
         <div className="flex items-baseline justify-between">
           <H2>{ordinal(currentPen)} 마음 펜</H2>
@@ -181,30 +266,29 @@ export default function Home({
 
       {open ? (
         <Card className="gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Field
-              id="weight"
-              label="이번 주 체중"
-              value={weight}
-              onChange={setWeight}
-              unit="kg"
-              inputMode="decimal"
-              placeholder={last.toFixed(1)}
-              big
-            />
-            <Help>지난 기록 {kg(last)}</Help>
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="text-[13px] font-semibold text-sub">이번 주 체중</div>
+            {ww ? (
+              <div className="text-right">
+                <span className="text-lg font-bold">{kg(ww.weight)}</span>
+                <span className="ml-1.5 text-xs text-muted">{md(ww.date)} 기록</span>
+              </div>
+            ) : (
+              <div className="text-[13px] font-semibold text-coral-text">아직 없어요</div>
+            )}
           </div>
+          {!ww && <Help tone="warn">이번 주 체중을 위에서 한 번 기록하면 마음 주사를 맞을 수 있어요.</Help>}
           <div className="flex flex-col gap-2">
             <div className="text-[15px] font-semibold leading-snug">이번 주 &lsquo;{profile.action}&rsquo;, 해냈나요?</div>
             <div role="group" aria-label="실천 여부" className="grid grid-cols-3 gap-2">
-              {(Object.keys(STATUS_LABEL) as ActionStatus[]).map((s) => (
-                <Choice key={s} selected={status === s} onClick={() => setStatus(s)}>
-                  <span className="text-sm">{STATUS_LABEL[s]}</span>
+              {(Object.keys(STATUS_LABEL) as ActionStatus[]).map((st) => (
+                <Choice key={st} selected={status === st} onClick={() => setStatus(st)}>
+                  <span className="text-sm">{STATUS_LABEL[st]}</span>
                 </Choice>
               ))}
             </div>
           </div>
-          <PrimaryButton disabled={!weightOk || !status} onClick={() => status && onCheckin(Math.round(w * 10) / 10, status)}>
+          <PrimaryButton disabled={!ww} onClick={() => onCheckin(status)}>
             마음 주사 맞기
           </PrimaryButton>
         </Card>
@@ -213,9 +297,14 @@ export default function Home({
           <div className="text-[15px] font-semibold">
             다음 마음 주사: {DAY_NAMES[profile.checkinDay]}요일{daysLeft < 7 ? ` (${daysLeft}일 뒤)` : ""}
           </div>
-          <Help>이번 주 실천 행동: {profile.action}</Help>
+          <Help>이번 주 실천 행동: {profile.action}. 체중은 매일 기록해도 돼요.</Help>
         </Card>
       )}
+
+      <Card className="gap-3">
+        <H2>체중 흐름</H2>
+        <WeightChart weights={state.weights} goal={profile.goalWeight} today={today} />
+      </Card>
 
       {prog.phase === "maintaining" && (
         <Card tone="teal" className="gap-1">

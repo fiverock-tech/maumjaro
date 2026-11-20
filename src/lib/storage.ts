@@ -1,5 +1,5 @@
-import type { AppState } from "./types";
-import { newId } from "./rules";
+import type { AppState, DailyWeight } from "./types";
+import { localDate, newId } from "./rules";
 
 const KEY = "maumjaro:v1";
 
@@ -8,6 +8,7 @@ export function emptyState(): AppState {
     version: 1,
     profile: null,
     checkins: [],
+    weights: [],
     savings: [],
     penCardsSeen: 0,
     anonId: newId(),
@@ -22,7 +23,7 @@ export function loadState(): AppState {
     if (!raw) return emptyState();
     const parsed = JSON.parse(raw);
     if (!isAppState(parsed)) return emptyState();
-    return parsed;
+    return migrate(parsed);
   } catch {
     return emptyState();
   }
@@ -57,6 +58,22 @@ export function isAppState(x: unknown): x is AppState {
   );
 }
 
+/** 예전 버전(주간 체중만 있던 기록)을 일별 체중으로 옮김 */
+export function migrate(s: AppState): AppState {
+  if (Array.isArray(s.weights)) return s;
+  const byDate = new Map<string, DailyWeight>();
+  if (s.profile) {
+    const d = localDate(new Date(s.profile.startedAt));
+    byDate.set(d, { date: d, weight: s.profile.startWeight, at: s.profile.startedAt });
+  }
+  for (const c of s.checkins) {
+    const d = localDate(new Date(c.at));
+    byDate.set(d, { date: d, weight: c.weight, at: c.at });
+  }
+  const weights = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return { ...s, weights };
+}
+
 /** 백업 파일 내용 */
 export function exportJson(state: AppState): string {
   return JSON.stringify({ app: "maumjaro", exportedAt: new Date().toISOString(), state }, null, 2);
@@ -67,7 +84,7 @@ export function importJson(text: string): AppState | null {
   try {
     const parsed = JSON.parse(text);
     const s = parsed?.app === "maumjaro" ? parsed.state : parsed;
-    return isAppState(s) ? s : null;
+    return isAppState(s) ? migrate(s) : null;
   } catch {
     return null;
   }

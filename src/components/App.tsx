@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ActionStatus, AppState, Bucket, Checkin, Profile } from "@/lib/types";
-import { completedPens, newId, progress, splitAmount, weekIndex } from "@/lib/rules";
+import { appNow, completedPens, localDate, newId, progress, splitAmount, upsertWeight, weekIndex, weekWeight } from "@/lib/rules";
 import { clearState, emptyState, loadState, saveState } from "@/lib/storage";
 import { sendEvent } from "@/lib/telemetry";
 import Onboarding from "./Onboarding";
@@ -51,7 +51,8 @@ export default function App() {
     return (
       <Onboarding
         onStart={(profile: Profile, consent: boolean) => {
-          const next = { ...state, profile, consent };
+          const start = { date: localDate(new Date(profile.startedAt)), weight: profile.startWeight, at: profile.startedAt };
+          const next = { ...state, profile, consent, weights: upsertWeight(state.weights, start) };
           commit(next);
           sendEvent(next, "start", { week: 0 });
           setView({ name: "home" });
@@ -60,15 +61,19 @@ export default function App() {
     );
   }
 
-  const now = new Date();
+  const now = appNow(state);
 
-  const checkin = (weight: number, status: ActionStatus) => {
+  const saveWeight = (weight: number) => {
+    const entry = { date: localDate(now), weight, at: now.toISOString() };
+    commit({ ...state, weights: upsertWeight(state.weights, entry) });
+  };
+
+  const checkin = (status: ActionStatus) => {
     const profile = state.profile!;
-    const real = weekIndex(profile.startedAt, now);
-    const last = state.checkins[state.checkins.length - 1];
-    // 테스트 모드에서는 같은 주에 여러 번 기록하므로 주차를 하나씩 올려 기록
-    const week = state.testMode && last ? Math.max(real, last.week + 1) : real;
-    const c: Checkin = { id: newId(), at: now.toISOString(), week, weight, action: profile.action, status };
+    const ww = weekWeight(state, now);
+    if (!ww) return;
+    const week = weekIndex(profile.startedAt, now);
+    const c: Checkin = { id: newId(), at: now.toISOString(), week, weight: ww.weight, action: profile.action, status };
     const next = { ...state, checkins: [...state.checkins, c] };
     commit(next);
 
@@ -155,7 +160,9 @@ export default function App() {
           key={state.checkins.length}
           state={state}
           now={now}
+          onSaveWeight={saveWeight}
           onCheckin={checkin}
+          onTestAdvance={(days) => update((s) => ({ ...s, testDayOffset: (s.testDayOffset || 0) + days }))}
           onOpenSettings={() => setView({ name: "settings" })}
           onOpenPen={(pen) => setView({ name: "pen", pen })}
           onOpenGraduation={() => setView({ name: "graduation" })}

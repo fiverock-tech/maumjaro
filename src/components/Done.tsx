@@ -47,10 +47,10 @@ export default function Done({
 
   const weightLine =
     delta < 0
-      ? `지난 기록보다 ${Math.abs(delta).toFixed(1)}kg 가벼워요`
+      ? `지난주보다 ${Math.abs(delta).toFixed(1)}kg 가벼워요`
       : delta > 0
         ? "이번 주는 체중이 조금 늘었어요. 스탬프는 그대로예요."
-        : "지난 기록과 같아요.";
+        : "지난주와 같아요.";
 
   const actionTitle =
     c.status === "done"
@@ -103,7 +103,7 @@ export default function Done({
       <Card className="gap-3.5">
         <H2>이번 주 기록</H2>
         <div className="flex items-baseline justify-between gap-3">
-          <div className="text-sm text-muted">체중</div>
+          <div className="text-sm text-muted">체중 (이번 주 마지막 기록)</div>
           <div className="text-right">
             <div className="text-base font-semibold">{kg(c.weight)}</div>
             <div className="text-xs text-muted">{weightLine}</div>

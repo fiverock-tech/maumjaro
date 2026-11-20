@@ -186,10 +186,19 @@ export default function Settings({
         <Toggle
           id="testmode"
           checked={state.testMode}
-          onChange={(v) => onUpdate((s) => ({ ...s, testMode: v }))}
+          onChange={(v) => onUpdate((s) => ({ ...s, testMode: v, testDayOffset: v ? s.testDayOffset || 0 : 0 }))}
           label="테스트 모드"
-          help="주 1회 제한을 풀어 여러 주를 바로 기록해 볼 수 있어요. 내부 점검용이에요."
+          help="날짜를 하루·일주일씩 앞으로 넘겨 여러 주를 바로 점검해 볼 수 있어요. 점검이 끝나면 '모든 기록 지우기'를 권해요."
         />
+        {state.testMode && (
+          <div className="flex items-center justify-between gap-2 text-[13px] text-sub">
+            <span>지금 +{state.testDayOffset || 0}일</span>
+            <span className="flex gap-1.5">
+              <button type="button" onClick={() => onUpdate((s) => ({ ...s, testDayOffset: (s.testDayOffset || 0) + 1 }))} className="min-h-9 rounded-lg border border-line bg-white px-3">+1일</button>
+              <button type="button" onClick={() => onUpdate((s) => ({ ...s, testDayOffset: (s.testDayOffset || 0) + 7 }))} className="min-h-9 rounded-lg border border-line bg-white px-3">+7일</button>
+            </span>
+          </div>
+        )}
       </Card>
 
       <Card>

@@ -43,14 +43,23 @@ export interface Saving {
   split: SavingSplit[];
 }
 
+/** 하루 체중 기록. 같은 날 여러 번 넣으면 마지막 값 */
+export interface DailyWeight {
+  date: string; // YYYY-MM-DD (기기 현지 날짜)
+  weight: number;
+  at: string; // ISO
+}
+
 export interface AppState {
   version: 1;
   profile: Profile | null;
   checkins: Checkin[];
+  weights: DailyWeight[]; // 날짜순
   savings: Saving[];
   penCardsSeen: number; // 확인한 펜 카드 수
   anonId: string;
   consent: boolean; // 익명 체크인 신호 전송 동의
-  testMode: boolean; // 주 1회 제한 해제(내부 테스트용)
+  testMode: boolean; // 내부 점검용: 날짜를 앞으로 넘겨 볼 수 있음
+  testDayOffset?: number; // 테스트 모드에서 오늘 날짜에 더할 일수
   graduationSeen?: boolean; // 졸업 화면을 확인하고 '유지 계속하기'를 눌렀는지
 }
